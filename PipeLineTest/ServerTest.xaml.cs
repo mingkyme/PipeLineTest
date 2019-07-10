@@ -22,8 +22,7 @@ namespace PipeLineTest
     {
         static string Separator = "\r\n";
         NamedPipeServerStream pipeFromWPF;
-        StreamReader reader;
-        StreamWriter writer;
+
         BackgroundWorker connectBackgroundWorker;
         BackgroundWorker receiveBackgroundWorker;
         BackgroundWorker sendBackgroundWorker;
@@ -74,32 +73,19 @@ namespace PipeLineTest
                 {
                     if (pipeFromWPF.IsConnected)
                     {
-                        reader = new StreamReader(pipeFromWPF);
-                        List<char> list = new List<char>();
-                        if (reader.Peek() > 0)
-                        {
-                            while (true)
-                            {
-                                var temp = reader.Read();
-                                if (temp != -1)
-                                {
-                                    list.Add((char)temp);
-                                }
-                                else
-                                {
-                                    var fullString = new string(list.ToArray());
-                                    print(fullString);
-                                   
-                                    break;
-                                }
-                            }
-                        }
+                        int len = pipeFromWPF.ReadByte() * 256 * 256;
+                        len += pipeFromWPF.ReadByte() * 256;
+                        len += pipeFromWPF.ReadByte();
+                        // 데이터의 길이 구하기
+                        byte[] receiveByteArray = new byte[len];
+                        pipeFromWPF.Read(receiveByteArray, 0, len);
+                        Console.WriteLine(Encoding.UTF8.GetString(receiveByteArray));
+                        pipeFromWPF.Flush();
                     }
                 }
                 catch (InvalidOperationException)
                 {
-                    // 연결이 끊어졌을 때
-                    connectBackgroundWorker.RunWorkerAsync();
+
                 }
                 catch
                 {
@@ -117,25 +103,18 @@ namespace PipeLineTest
                 {
                     if (pipeFromWPF.IsConnected)
                     {
-                        if (sendQueue.Count > 0)
-                        {
-                            writer = new StreamWriter(pipeFromWPF);
-                            if (pipeFromWPF.IsConnected)
-                            {
-                                var temp = sendQueue.Dequeue();
-                                writer.Write(temp.ToString());
-                                writer.Flush();
-
-                                pipeFromWPF.WaitForPipeDrain();
-                                pipeFromWPF.Dispose();
-                                print("전송 성공");
-                            }
-                        }
+                        string msg = "Hello World!";
+                        byte[] sendMsg = Encoding.UTF8.GetBytes(msg);
+                        int len = sendMsg.Length;
+                        pipeFromWPF.WriteByte( (byte)(len / 256 / 256) );
+                        pipeFromWPF.WriteByte( (byte)(len / 256) );
+                        pipeFromWPF.WriteByte( (byte)(len % 256) );
+                        pipeFromWPF.Write(sendMsg, 0, len);
+                        pipeFromWPF.Flush();
                     }
                 }
                 catch (InvalidOperationException)
                 {
-                    connectBackgroundWorker.RunWorkerAsync();
                     // 연결이 끊어졌을 때
                 }
                 catch
@@ -180,7 +159,7 @@ namespace PipeLineTest
             pipeFromWPF.Close();
         }
 
-        private void print(string v)
+        private void print(object v)
         {
             Console.WriteLine(v);
         }
